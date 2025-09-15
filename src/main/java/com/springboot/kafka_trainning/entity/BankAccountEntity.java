@@ -20,7 +20,7 @@ import java.util.UUID;
 public class BankAccountEntity {
 
     @Id
-    private UUID id;
+    private String id;
 
     @Column(name = "owner")
     private String owner;

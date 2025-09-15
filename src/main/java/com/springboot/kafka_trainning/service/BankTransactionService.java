@@ -1,7 +1,10 @@
 package com.springboot.kafka_trainning.service;
 
+import com.springboot.kafka_trainning.entity.BankAccountEntity;
 import com.springboot.kafka_trainning.entity.BankTransactionEntity;
 import com.springboot.kafka_trainning.dtos.BankTransactionDTO;
+import com.springboot.kafka_trainning.execptions.AccountNotFound;
+import com.springboot.kafka_trainning.repository.BankAccountRepository;
 import com.springboot.kafka_trainning.repository.BankTransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,25 +20,32 @@ public class BankTransactionService {
     @Autowired
     private BankTransactionRepository repository;
 
+    @Autowired
+    private BankAccountRepository bankAccountRepository;
+
     @Transactional(
             transactionManager = "transactionManager",
             propagation = Propagation.REQUIRED,    // join or create transaction
             isolation = Isolation.REPEATABLE_READ, // ensure balance consistency
-            rollbackFor = RuntimeException.class
+            rollbackFor = AccountNotFound.class
     )
     public void persistIsolatedTransaction(BankTransactionDTO bankTransactionDTO) {
 
-        BankTransactionEntity transaction = repository.findById(UUID.fromString(bankTransactionDTO.getId()))
-                .orElseThrow(() -> new RuntimeException("Account not found: " + UUID.fromString(bankTransactionDTO.getId())));
+        BankAccountEntity transaction = bankAccountRepository.findByOwner(bankTransactionDTO.getAccountOwner())
+                .orElseThrow(() -> new AccountNotFound(bankTransactionDTO.getAccountOwner()));
 
         // Remove Taxes, let's say 10%
-        transaction.setAmount(transaction.getAmount() * 0.90 );
+        bankTransactionDTO.setAmount(bankTransactionDTO.getAmount() * 0.90 );
 
         // debit
-        repository.save(transaction);
+        BankTransactionEntity entity = new BankTransactionEntity();
+        entity.setId(UUID.randomUUID().toString());
+        entity.setAmount(bankTransactionDTO.getAmount() * 0.90);
+        entity.setAccountOwner(bankTransactionDTO.getAccountOwner());
+        repository.save(entity);
 
         // simulate an error
-        if (transaction.getAmount() > 500) {
+        if (bankTransactionDTO.getAmount() > 500) {
             throw new RuntimeException("Transfer limit exceeded!");
         }
     }

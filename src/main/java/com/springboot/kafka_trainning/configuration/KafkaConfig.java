@@ -32,10 +32,8 @@ public class KafkaConfig {
     @Value("${app.topic.name}")
     private String myConsumerTopics;
 
-    // Getters for the topic names
-    public String getMyConsumerTopics() {
-        return myConsumerTopics;
-    }
+    @Value("${app.topic-dql.name}")
+    private String dlqTopic;
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
@@ -56,6 +54,12 @@ public class KafkaConfig {
         KafkaTemplate<String, Object> template = new KafkaTemplate<>(producerFactory());
         template.setTransactionIdPrefix("tx-"); // helpful for debugging
         return template;
+    }
+
+    /** KAFKA TRANSACTION MANAGER FOR @Transactional **/
+    @Bean
+    public KafkaTransactionManager<String, Object> kafkaTransactionManager() {
+        return new KafkaTransactionManager<>(producerFactory());
     }
 
     @Bean
@@ -89,25 +93,15 @@ public class KafkaConfig {
     }
 
     @Bean
-    public KafkaTransactionManager<String, Object> kafkaTransactionManager() {
-        return new KafkaTransactionManager<>(producerFactory());
-    }
+    public DefaultErrorHandler errorHandler(KafkaTemplate<String, Object> template, @Value("${app.topic-dql.name}") String dlq) {
 
-    @Bean
-    public DefaultErrorHandler errorHandler(KafkaTemplate<Object, Object> kafkaTemplate) {
-
-        // Define Dead Letter Queue naming convention: originalTopic.DLT
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
-                kafkaTemplate,
-                (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
+                template, (record, ex) -> new TopicPartition(dlq, record.partition())
         );
-
-        // Retry policy: exponential backoff, max 3 retries
-        ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(3);
-        backOff.setInitialInterval(500);  // 0.5s
-        backOff.setMultiplier(2.0);       // double interval each retry
-        backOff.setMaxInterval(5000);     // max 5s
-
-        return new DefaultErrorHandler(recoverer, backOff);
+        var backoff = new ExponentialBackOffWithMaxRetries(2);
+        backoff.setInitialInterval(500);
+        backoff.setMultiplier(2.0);
+        backoff.setMaxInterval(5000);
+        return new DefaultErrorHandler(recoverer, backoff);
     }
 }

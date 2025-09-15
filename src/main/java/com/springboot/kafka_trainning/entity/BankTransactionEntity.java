@@ -16,7 +16,7 @@ import java.util.UUID;
 public class BankTransactionEntity {
 
     @Id
-    private UUID id;
+    private String id;
 
     @Version
     private Long version;
